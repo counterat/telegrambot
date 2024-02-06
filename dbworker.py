@@ -11,7 +11,7 @@ CONFIG={}
 DBCONNECT="data.sqlite"
 
 class User:
-        def __init__(self):
+    def __init__(self):
         self.id = None
         self.tgid = None
         self.subscription = None
