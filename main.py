@@ -71,25 +71,97 @@ class MyStates(StatesGroup):
     AdminNewUrl = State()
     AdminMessage = State()
 
-@bot.message_handler(commands=['start'])
+
+def generate_referal_code():
+    return random.randint(1000000000, 9999999999)  
+
+def check_message_args(func):
+    async def wrapper(*args, **kwargs):
+        if len(args) < 2 or not isinstance(args[1], types.Message):
+            print("Ошибка: Функция должна иметь аргумент message типа types.Message")
+            return
+        await func(*args, **kwargs)
+    return wrapper
+
+
+@@bot.message_handler(commands=['start'])
 async def start(message:types.Message):
+
     if message.chat.type == "private":
+        args = None
+        try:
+            args = message.text.split()[1]
+
+        except:
+            pass
+
         await bot.delete_state(message.from_user.id)
+
         user_dat = await User.GetInfo(message.chat.id)
+
         if user_dat.registered:
             await bot.send_message(message.chat.id,"Информация о подписке",parse_mode="HTML",reply_markup=await main_buttons(user_dat))
+            try:
+                args = message.text.split()[1]
+                if not (user_dat.was_invited_by_user and args):
+                    async with aiosqlite.connect(DBCONNECT) as db:
+                        cursor = await db.execute("SELECT * FROM userss WHERE referal_code = ?", (int(args),))
+
+                        user_data_of_user_who_invited = await cursor.fetchone()
+                        print(user_data_of_user_who_invited)
+                        print(user_data_of_user_who_invited[1], message.from_user.id, user_data_of_user_who_invited[1] != message.from_user.id)
+                        if user_data_of_user_who_invited[1] != message.from_user.id:
+                            print(int(args), message.from_user.id, int(args) != message.from_user.id)
+                            await user_dat.process_referal_invitation(referal_code=int(args), id_of_user_who_was_invited=message.from_user.id )
+            except Exception as ex:
+                print(ex)
         else:
             try:
                 username = "@" + str(message.from_user.username)
             except:
 
                 username = str(message.from_user.id)
+            referal_code = generate_referal_code()
+            print(referal_code)
+            while True:
+                if not await user_dat.is_referal_code_unique(referal_code):
+                    referal_code = generate_referal_code()
+                    print(referal_code)
+                else:
+                    break
+            if args:
+                await user_dat.Adduser(username, message.from_user.full_name, referal_code,)
+                await user_dat.process_referal_invitation(referal_code=int(args), id_of_user_who_was_invited=message.from_user.id)
 
-            await user_dat.Adduser(username,message.from_user.full_name)
+            else:
+                await user_dat.Adduser(username,message.from_user.full_name, referal_code)
             user_dat = await User.GetInfo(message.chat.id)
             await bot.send_message(message.chat.id,e.emojize(texts_for_bot["hello_message"]),parse_mode="HTML",reply_markup=await main_buttons(user_dat))
             await bot.send_message(message.chat.id,e.emojize(texts_for_bot["trial_message"]))
-
+            
+@bot.message_handler(func=lambda message: message.text == e.emojize("Пригласить друга:handshake:"))
+async def return_ref_code(m:types.Message):
+    try:
+        user_dat = await User.GetInfo(m.from_user.id)
+        if user_dat.registered:
+            await bot.send_message(m.from_user.id, f'''
+*Пригласите друга и получите месяц бесплатного использования*
+    
+_Что надо сделать?_
+1) Скопируйте [ссылку](https://t.me/RakoskiGymnasiumBot?start={user_dat.referal_code}) ниже 
+2) Отправьте её другу
+3) Ваш друг должен сделать любую покупку в нашем боте 
+4) Поблагодарите друга
+5) Наслаждайтесь месяцем бесплатной подписки
+    
+[Ваша реферальная ссылка](https://t.me/RakoskiGymnasiumBot?start={user_dat.referal_code})
+    
+    
+        ''', parse_mode='MARKDOWN')
+        else:
+            await bot.send_message(m.from_user.id, 'Вы не зарегистрирован!')
+    except Exception as ex:
+        pass
 
 
 @bot.message_handler(state=MyStates.ServerDelet, content_types=["text"])
@@ -789,11 +861,26 @@ async def addTimePament(m,month):
     user_dat = await User.GetInfo(m.from_user.id)
     await bot.send_message(m.from_user.id, texts_for_bot["success_pay_message"],
                            reply_markup=await buttons.main_buttons(user_dat), parse_mode="HTML")
+    
 @bot.message_handler(content_types=['successful_payment'])
 async def got_payment(m):
+    user_dat = await User.GetInfo(m.from_user.id)
+    if user_dat.was_invited_by_user:
+        async with aiosqlite.connect(DBCONNECT) as db:
+            cursor = await db.execute("SELECT * FROM userss WHERE tgid = ?", (user_dat.was_invited_by_user,))
+            user_who_invited = (await cursor.fetchone())
+
+
+            await AddTimeToUser(user_who_invited[1], 2592000)
+            user_dat_of_user_who_invited = await User.GetInfo(user_who_invited[1])
+            print("before error")
+            await bot.send_message(user_who_invited[1],"Вам начислено месяц бесплатного времени использования, так как юзер приглашенный вами сделал покупку!",
+                                   reply_markup= await main_buttons(user_dat_of_user_who_invited) )
     payment:types.SuccessfulPayment = m.successful_payment
     month=int(str(payment.invoice_payload).split(":")[1])
+
     await addTimePament(m,month)
+
 
 
 bot.add_custom_filter(asyncio_filters.StateFilter(bot))
