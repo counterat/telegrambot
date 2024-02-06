@@ -84,7 +84,7 @@ def check_message_args(func):
     return wrapper
 
 
-@@bot.message_handler(commands=['start'])
+@bot.message_handler(commands=['start'])
 async def start(message:types.Message):
 
     if message.chat.type == "private":
