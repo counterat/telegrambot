@@ -11,7 +11,7 @@ CONFIG={}
 DBCONNECT="data.sqlite"
 
 class User:
-    def __init__(self):
+        def __init__(self):
         self.id = None
         self.tgid = None
         self.subscription = None
@@ -19,6 +19,9 @@ class User:
         self.registered = False
         self.username = None
         self.fullname = None
+        self.referal_code = None
+        self.was_invited_by_user = None
+        self.invited_users_by_this_user = None
 
     @classmethod
     async def GetInfo(cls, tgid):
@@ -37,6 +40,12 @@ class User:
             self.registered = True
             self.username = log["username"]
             self.fullname = log["fullname"]
+            self.referal_code = log['referal_code']
+
+            self.was_invited_by_user = log['was_invited_by_user']
+
+            self.invited_users_by_this_user = log['invited_users_by_this_user']
+       
         else:
             self.registered = False
 
@@ -78,11 +87,18 @@ class User:
         await c.close()
         await db.close()
         return log
+    async def is_referal_code_unique(self, referal_code):
+        async with aiosqlite.connect(DBCONNECT) as db:  # Подставьте имя вашей базы данных
+            cursor = await db.execute("SELECT COUNT(*) FROM userss WHERE referal_code = ?", (referal_code,))
+            count = (await cursor.fetchone())[0]
+        return count == 0
 
-    async def Adduser(self,username,full_name):
+    async def Adduser(self,username,full_name, referal_code, was_invited_by_user=None):
         if self.registered == False:
             db = await aiosqlite.connect(DBCONNECT)
-            await db.execute(f"INSERT INTO userss (tgid,subscription,username,fullname) values (?,?,?,?)", (self.tgid,str(int(time.time())+int(CONFIG['trial_period'])),str(username),str(full_name)))
+            await db.execute(f"INSERT INTO userss (tgid,subscription,username,fullname, referal_code, was_invited_by_user) values (?,?,?,?,?,?)", (self.tgid,
+                                                                                                                                                                                                                                                                                                                                                                               str(int(time.time())+int(CONFIG[
+                                                                                                                                                                    'trial_period'])),str(username),str(full_name), referal_code, was_invited_by_user))
             await db.commit()
             await db.close()
             self.registered = True
@@ -105,7 +121,24 @@ class User:
         await c.close()
         await db.close()
         return log
+    async def process_referal_invitation(self, referal_code, id_of_user_who_was_invited):
 
+        try:
+            async with aiosqlite.connect(DBCONNECT) as db:
+                cursor = await db.execute("SELECT * FROM userss WHERE referal_code = ?", (referal_code,))
+                print(cursor)
+                user_data_of_user_who_invited = await cursor.fetchone()
+                print(user_data_of_user_who_invited)
+                invited_users_by_user = user_data_of_user_who_invited[10]
+                print(invited_users_by_user)
+                invited_users_by_user += f'{id_of_user_who_was_invited},'
+                print(invited_users_by_user)
+                await db.execute(f"UPDATE userss SET invited_users_by_this_user = ? WHERE tgid = ?", (invited_users_by_user, user_data_of_user_who_invited[1]))
+
+                await db.execute(f"UPDATE userss SET was_invited_by_user = ? WHERE tgid = ?", (user_data_of_user_who_invited[1], id_of_user_who_was_invited))
+                await db.commit()
+        except Exception as ex:
+            print(ex)
 
 
 
