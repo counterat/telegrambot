@@ -148,7 +148,7 @@ async def return_ref_code(m:types.Message):
 *Пригласите друга и получите месяц бесплатного использования*
     
 _Что надо сделать?_
-1) Скопируйте [ссылку](https://t.me/RakoskiGymnasiumBot?start={user_dat.referal_code}) ниже 
+1) Скопируйте [ссылку](https://t.me/SnapVpnService_bot?start={user_dat.referal_code}) ниже 
 2) Отправьте её другу
 3) Ваш друг должен сделать любую покупку в нашем боте 
 4) Поблагодарите друга
